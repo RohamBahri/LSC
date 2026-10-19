@@ -1,43 +1,62 @@
-# Weekly inventory decisions on real LSC records
+# Inventory decisions under uncertainty — real LSC records
 
-A lean **research replay**, not an LSC deployment tool. It uses actual weekly PCP sales from `datasets.zip`, with the inventory ledger in `Inventory.zip` for an independent opening-balance audit. No synthetic demand, invented switching probabilities, or fabricated financial returns.
+A small research replay of **weekly order-up-to inventory policies**. Demand inputs are real recorded PCP shipments, never artificially generated. The optimization question is general; LSC supplies the historical observations. This is **not** a deployable recommendation system or a causal substitution estimate.
 
 ## Run
 
 ```bash
 pip install -r requirements.txt
-python -m inventory.experiment --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip
 python -m pytest -q
+python -m inventory.batch --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip
 ```
 
-Defaults: physical location `BONPCP`, exact T/U item numbers `P043120MN1D312EP` and `S043120MN1D312EP` (both family 043-1200, MN1 elastomer). Choose another **compatible** pair with `--base LYD --items T_ITEM U_ITEM`. Item number matters: different elastomers are **not** pooled. Never commit confidential ZIPs to this public repository.
+The cohort is selected **using 2024 sales only**: matching T/U stators with the same exact suffix (including elastomer), at one physical location, at least 5 units of **each** product. All eligible pairs are evaluated; use `--top 12` for a shorter run. Sales are deduplicated across the known February/March file overlaps. No proprietary data is committed.
 
-## What is evaluated
+```bash
+# Substitution sensitivity: extreme assumption, NOT observed response probabilities.
+python -m inventory.batch --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip --mode both
 
-- **Observed input:** deduplicated positive PCP shipment quantities, by complete Monday–Sunday week, January 2024–August 2026. Exports are read without the documented February/March overlap; final partial week is excluded. These are recorded purchases, **not known primary demand**.
-- **Decision:** two integer order-up-to levels, one for each item. At the start of each week, prior orders arrive, a new replenishment order is placed, and recorded purchases are fulfilled. Unused inventory and orders in transit carry across weeks.
-- **Lead time:** an assumed fixed 1 week (`--lead 2` tests two weeks). We have not estimated delivery lead times from order and receipt timestamps. There are no order-pulled emergency transfers or within-week replenishments.
-- **Cost sensitivity:** average end-of-week units held × 1 plus missed recorded purchase units × an assumed penalty (2, 5, or 10). These are **cost ratios**, not LSC dollars. Change with `--penalties 3 6`.
-- **Substitution sensitivity:** no switching versus full two-way switching whenever spare stock exists. This is a scenario envelope, **not a causal estimate, actual physical interchangeability, or observed customer behavior**. No switching should be the primary interpretation.
-- **Methods:** an empirical lead-plus-review-period **Quantile** baseline; an **Empirical** order-up-to level minimizing past replay cost; **Robust** minimax expected-cost regret across the two switching extremes. Search bounds come from the actual past demand windows, not receipt flow.
-- **Evaluation:** all policies re-select levels every 13 weeks based on only the previous 52 weeks; stock and outstanding orders are carried continuously through the out-of-time test (2025–August 2026). The first four evaluation weeks are omitted to reduce arbitrary zero-start effects. Results include paired four-week moving-block bootstrap intervals for weekly cost differences versus Quantile.
+# Where complete switching could matter most, as an optimistic scenario bound.
+python -m inventory.batch --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip --switch-map
 
-### Important limitations
+# Audit serial-linked posting-date gaps (NOT physical replenishment lead times).
+python -m inventory.transfers --inventory /path/to/Inventory.zip
 
-1. The ledger records signed movements but lacks verified January 2024 opening stocks. The code reports **minimum nonnegative opening balances** inferred retrospectively and checks additional opening balances of +0/+2/+5 units. Those are *diagnostics*, not evidence of actual zero-stock or verified lost sales. Posting dates cannot determine whether receipts preceded same-day invoices.
-2. Historical sales depend on inventory and substitution. A new policy could change customer behavior; the replay does **not** recover that counterfactual and cannot establish actual cost savings or service improvement. Its held-out cost is a **model-based proxy** on historical billed quantities.
-3. Order arrival timing, storage cost, unmet-demand cost, and substitution rules are not observed. Do not claim estimates of these quantities. Lack of cost data is handled using explicitly varied **relative** costs.
-4. Comparisons concern one location and a *single exact T/U SKU pair*. Broader evidence requires rerunning on additional pairs and learning the demand/stock observation process.
+# Single exact item pair, opening-stock diagnostics and cost-ratio sensitivity.
+python -m inventory.experiment --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip
+```
+
+## Model
+
+Each week, previously ordered inventory arrives, the company orders up to a target inventory position, and then billed quantities are used as a proxy for requests. Unsold stock and open orders persist. Targets are selected quarterly from the preceding 52 weeks, using **no future sales**. Compare:
+
+- **Quantile:** observed lead-plus-review-period demand quantile (simple benchmark).
+- **Empirical:** lowest historical weekly holding-plus-unmet cost in a warm-started replay.
+- **Robust:** smallest worst regret over two possible switching behaviors: none, or full two-way T/U substitution.
+
+Replay uses a lead time of 1 week by default (`--lead 2` for sensitivity). Each item starts with the candidate's inventory level in training; initial evaluation stock is set from its first policy target, then carried forward. We omit the initial warm-up weeks. Report modeled weekly cost, **coverage of recorded purchases**, mean ending stock, and synchronized paired moving-block confidence intervals across item pairs. Holding cost is one normalized unit; unmet sales are penalized by an **assumed** ratio, e.g. `--penalty 5` in batch.
+
+### Interpretation limits
+
+1. Historical **sales are not unconstrained customer requests**: stockouts and substitution may have censored or changed them. Replaying a new inventory policy over billed purchases is a **model-based scenario test**, not an unbiased estimate of real lost demand, fill rate, savings or causal policy effects.
+2. Substitution is unverified. Full switching gives an **optimistic modeling extreme**, not a validated physical repair option. No actual customer-choice probability is estimated.
+3. Product costs, shortage costs, physical order lead times, and initial on-hand stock are not reliably identified. Cost ratios and lead times are explicit sensitivity assumptions. The ledger's serial-linked origin/destination **posting** dates are often the same day or inconsistent, so they cannot determine physical shipping and order lead times.
+4. The opening-stock audit reports the **smallest nonnegative inferred balance** and sensitivity to additional unobserved initial stock. Zero balances inferred this way are not verified stockouts.
+5. The cohort and 2024 eligibility screen are fixed before the later evaluation period, but the exploratory cost scenarios were chosen by researchers. Intervals quantify temporal variation conditional on this replay and selected cohort; they are not deployment confidence intervals.
 
 ## Modules
 
-- `inventory/data.py` — read and deduplicate actual sales and ledger records, weekly exact-SKU purchases
-- `inventory/availability.py` — audited lower-bound stock reconstruction and opening-balance sensitivity
-- `inventory/replay.py` — weekly carryover, replenishment lead time, shortages, switch sensitivity
-- `inventory/optimize.py` — simple and robust weekly order-up-to selection
-- `inventory/experiment.py` — rolling real-data evaluation and paired uncertainty intervals
-- `tests/test_model.py` — hand-checked mechanics
+- `data.py`: original sales and serial inventory archives, exact product IDs, weekly purchases
+- `availability.py`: opening-stock uncertainty audit
+- `replay.py`: lead time, continuous inventory, substitution, and cost
+- `optimize.py`: three compact, per-pair replenishment policies
+- `experiment.py`: single-pair rolling evaluation and diagnostics
+- `batch.py`: all eligible real item pairs, pooled comparisons, full-switch sensitivity
+- `transfers.py`: serial-linked **posting** gaps, not delivery lead time
+- `tests/`: hand-verifiable checks
 
-## Next question
+## What we learned, and the next question
 
-Do differences in **demand timing** and **replenishment lead time** matter more than possible T/U substitution? If so, extend this weekly replay to pooled policies learned across many sparse item/location series, with inventory cost as the objective. Actual cost, fulfillment, and request data would improve identification, but no more complicated model is needed to begin testing that hypothesis.
+In an exploratory run of 26 pairs (2024 T/U volumes at least five each), **Quantile covers more recorded purchases**, while Empirical and Robust show no clear advantage in modeled weekly costs at an assumed 5:1 shortage-to-holding ratio. Full interchangeability changes modeled coverage much more than policy choice, but it is **not identified** from the available data.
+
+The next research experiment should compare **pooled, decision-focused inventory targets across sparse series** against this strong Quantile baseline. Any improvement must be measured across later time periods under the same cost/lead assumptions. Do not infer actual service performance without verified stock and primary demand.
