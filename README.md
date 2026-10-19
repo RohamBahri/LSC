@@ -1,6 +1,6 @@
-# Inventory decisions using real LSC records
+# Weekly inventory decisions on real LSC records
 
-Small exploratory model for **uncertain demand and possible T/U substitution**. No synthetic demand, fabricated sales observations, random substitution rates, or assumed financial costs. The optimization scenarios are **actual historical monthly purchases**, preserving T/U co-movement. The code reads the existing archives locally and does not publish confidential data.
+A lean **research replay**, not an LSC deployment tool. It uses actual weekly PCP sales from `datasets.zip`, with the inventory ledger in `Inventory.zip` for an independent opening-balance audit. No synthetic demand, invented switching probabilities, or fabricated financial returns.
 
 ## Run
 
@@ -10,30 +10,34 @@ python -m inventory.experiment --sales /path/to/datasets.zip --inventory /path/t
 python -m pytest -q
 ```
 
-Defaults: physical base **BONPCP**, pump family **043-1200**. Change with `--base LYD --size 015-1400`. You must have both original archives. **Do not commit them to this public repository.**
+Defaults: physical location `BONPCP`, exact T/U item numbers `P043120MN1D312EP` and `S043120MN1D312EP` (both family 043-1200, MN1 elastomer). Choose another **compatible** pair with `--base LYD --items T_ITEM U_ITEM`. Item number matters: different elastomers are **not** pooled. Never commit confidential ZIPs to this public repository.
 
-## What the experiment actually measures
+## What is evaluated
 
-- Six nonoverlapping PCP sales extracts, including the main file through February 2026, avoid the documented February and March export overlap.
-- Select actual **T and U stator invoices**, not rotor lines, using physical `Location Code` and the exact nominal-capacity/lift family.
-- Use actual positive incoming transfers of matching T/U stators from the serial-level inventory ledger. A receipt is **not** evidence of beginning or ending inventory.
-- Compare **three study allocation budgets** drawn from the 25th, 50th, and 75th percentiles of 2024–25 monthly incoming transfers. This is *not a measured capacity limit*; it can be changed once LSC's inventory limits or service requirements are known.
-- Select inventory mixes on **January 2024–December 2025** observations, then evaluate on **January–August 2026**, with no future-period model selection.
-- Compare a stock mix based on actual historical transfer receipts, a no-switch stochastic allocation, and a **minimax-regret** allocation across possible substitution modes.
-- Report average *unserved recorded purchase units* and regret, **not** dollar savings, true lost demand, or realized counterfactual service rates.
+- **Observed input:** deduplicated positive PCP shipment quantities, by complete Monday–Sunday week, January 2024–August 2026. Exports are read without the documented February/March overlap; final partial week is excluded. These are recorded purchases, **not known primary demand**.
+- **Decision:** two integer order-up-to levels, one for each item. At the start of each week, prior orders arrive, a new replenishment order is placed, and recorded purchases are fulfilled. Unused inventory and orders in transit carry across weeks.
+- **Lead time:** an assumed fixed 1 week (`--lead 2` tests two weeks). We have not estimated delivery lead times from order and receipt timestamps. There are no order-pulled emergency transfers or within-week replenishments.
+- **Cost sensitivity:** average end-of-week units held × 1 plus missed recorded purchase units × an assumed penalty (2, 5, or 10). These are **cost ratios**, not LSC dollars. Change with `--penalties 3 6`.
+- **Substitution sensitivity:** no switching versus full two-way switching whenever spare stock exists. This is a scenario envelope, **not a causal estimate, actual physical interchangeability, or observed customer behavior**. No switching should be the primary interpretation.
+- **Methods:** an empirical lead-plus-review-period **Quantile** baseline; an **Empirical** order-up-to level minimizing past replay cost; **Robust** minimax expected-cost regret across the two switching extremes. Search bounds come from the actual past demand windows, not receipt flow.
+- **Evaluation:** all policies re-select levels every 13 weeks based on only the previous 52 weeks; stock and outstanding orders are carried continuously through the out-of-time test (2025–August 2026). The first four evaluation weeks are omitted to reduce arbitrary zero-start effects. Results include paired four-week moving-block bootstrap intervals for weekly cost differences versus Quantile.
 
-No substitution rates are invented. Instead, we evaluate four **logical possibilities**: no switching, T→U only, U→T only, and either direction, all conditional on spare inventory. These are structural *bounds*, not estimates. We cannot identify customers' original first choices or acceptance rates from the sales data alone. This is **sensitivity analysis** using only real demand observations, not proof of causal substitution.
+### Important limitations
 
-The objective is coverage of historical billed units under a hypothetical monthly stock budget. Because orders can occur throughout a month and local stock carries over, this is **not** a reconstruction of LSC's actual stockout or customer experience. Historical purchased items are a biased proxy for unconstrained requests. It is deliberately a narrow research baseline, not a deployable policy.
+1. The ledger records signed movements but lacks verified January 2024 opening stocks. The code reports **minimum nonnegative opening balances** inferred retrospectively and checks additional opening balances of +0/+2/+5 units. Those are *diagnostics*, not evidence of actual zero-stock or verified lost sales. Posting dates cannot determine whether receipts preceded same-day invoices.
+2. Historical sales depend on inventory and substitution. A new policy could change customer behavior; the replay does **not** recover that counterfactual and cannot establish actual cost savings or service improvement. Its held-out cost is a **model-based proxy** on historical billed quantities.
+3. Order arrival timing, storage cost, unmet-demand cost, and substitution rules are not observed. Do not claim estimates of these quantities. Lack of cost data is handled using explicitly varied **relative** costs.
+4. Comparisons concern one location and a *single exact T/U SKU pair*. Broader evidence requires rerunning on additional pairs and learning the demand/stock observation process.
 
 ## Modules
 
-- `inventory/data.py`: parse actual sales and incoming-transfer archives; build monthly T/U panel
-- `inventory/model.py`: count fulfillable units with optional directional substitution
-- `inventory/optimize.py`: enumerate inventory mixes and select policies
-- `inventory/experiment.py`: historical training and untouched later-period evaluation
-- `tests/test_model.py`: tiny arithmetic checks (not experiment inputs)
+- `inventory/data.py` — read and deduplicate actual sales and ledger records, weekly exact-SKU purchases
+- `inventory/availability.py` — audited lower-bound stock reconstruction and opening-balance sensitivity
+- `inventory/replay.py` — weekly carryover, replenishment lead time, shortages, switch sensitivity
+- `inventory/optimize.py` — simple and robust weekly order-up-to selection
+- `inventory/experiment.py` — rolling real-data evaluation and paired uncertainty intervals
+- `tests/test_model.py` — hand-checked mechanics
 
-## Next research step
+## Next question
 
-Inspect sensitivity over **actual** base/size combinations and actual past receipt-volume quantiles. Then use the ledger to reconstruct credible local stock and improve the demand-observation model, explicitly accounting for unknown opening balances and order-driven transfers. Do not estimate substitution causally or claim inventory-policy savings without further evidence.
+Do differences in **demand timing** and **replenishment lead time** matter more than possible T/U substitution? If so, extend this weekly replay to pooled policies learned across many sparse item/location series, with inventory cost as the objective. Actual cost, fulfillment, and request data would improve identification, but no more complicated model is needed to begin testing that hypothesis.
