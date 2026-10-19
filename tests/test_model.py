@@ -34,3 +34,24 @@ def test_selection_and_interval():
 def test_coverage():
     r = [{'requests': 3, 'Quantile': 7, 'Quantile_missed': 1, 'Quantile_stock': 2}]
     assert summary(r, 'Quantile')['coverage'] == 2 / 3
+
+
+def test_pooled_uses_only_previous_weeks():
+    from inventory.pooled import target
+    y = np.ones((110, 2), dtype=int)
+    theta = (.5, 1., 0.)
+    first = target(y, y, 105, 1, theta)
+    altered = y.copy()
+    altered[105:] *= 100
+    assert target(altered, altered, 105, 1, theta) == first
+
+
+def test_stock_and_hindsight():
+    import pandas as pd
+    from inventory.frontier import hindsight
+    from inventory.experiment import evaluation
+    dates = pd.date_range('2024-01-01', '2026-08-24', freq='W-MON')
+    weekly = pd.DataFrame(np.ones((len(dates), 2), dtype=int), index=dates)
+    rows = evaluation(weekly, start_date='2026-01-05')
+    assert rows and rows[0]['week'] >= '2026-01-05'
+    assert len(hindsight(weekly, 5)) == 3

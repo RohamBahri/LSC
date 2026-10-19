@@ -26,5 +26,3 @@ def select_all(history, lead=1, penalty=5.):
             'Robust': choices[robust]}
 
 
-def select(history, lead, penalty, policy):
-    return select_all(history, lead, penalty)[policy]

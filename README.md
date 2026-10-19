@@ -55,8 +55,28 @@ Replay uses a lead time of 1 week by default (`--lead 2` for sensitivity). Each 
 - `transfers.py`: serial-linked **posting** gaps, not delivery lead time
 - `tests/`: hand-verifiable checks
 
+
+## Inventory–coverage frontiers and pooled learning
+
+Compare **2026 held-out stock–coverage curves**, not a single shortage penalty:
+
+```bash
+python -m inventory.frontier --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip --output frontier.csv
+python -m inventory.pooled --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip --output pooled.csv
+python -m inventory.compare --frontier frontier.csv --pooled pooled.csv
+```
+
+- `frontier.py` sweeps shortage penalties for Quantile, Empirical, Robust, and a **fixed** hindsight benchmark chosen using all 2026 demand. The benchmark is unavailable to real decision makers and **not** an upper bound for all adaptive policies.
+- `pooled.py` fits **one shared low-dimensional trend/scale/stock-cushion rule** across the selected item pairs. Inputs are the exact item's trailing 4/13/52-week billed rates and its physical base's recent growth. Two variants choose shared parameters on **2025 only**: one minimizes next-horizon quantile (pinball) loss; the other minimizes the full inventory replay loss. The rule is deliberately much simpler than a general pooled ML model.
+- The cohort is chosen from **2024**. Every method is evaluated on **January–August 2026**, with targets recomputed quarterly from prior observations. 2026 is **never used to fit pooled parameters**. Replays start from the first target and discard the same opening weeks.
+- `compare.py` interpolates observed curve points at common average ending-stock levels. **Interpolated values are descriptive and need not be achievable by a deterministic policy.** All policies use real billed volumes as a demand proxy; service coverage is not a verified customer fill rate.
+
+Initial 26-pair held-out result: at average ending stock of ~3 units, pooled rules cover ~86.6% of recorded purchases versus Quantile ~85.5%; at lower inventories the pooled rules do not outperform Quantile. No established pooled-learning advantage yet. The gap to the hindsight fixed-stock result cannot automatically be closed by a learnable policy.
+
+**Literature warning:** Gupta and Kallus, *Data Pooling in Stochastic Optimization*, *Management Science* 68(3), 1595–1615 (2022), DOI `10.1287/mnsc.2020.3933`, already develops decision-data pooling for many small stochastic programs and evaluates retail inventory. Pooling by itself is **not a novelty claim**.
+
 ## What we learned, and the next question
 
 In an exploratory run of 26 pairs (2024 T/U volumes at least five each), **Quantile covers more recorded purchases**, while Empirical and Robust show no clear advantage in modeled weekly costs at an assumed 5:1 shortage-to-holding ratio. Full interchangeability changes modeled coverage much more than policy choice, but it is **not identified** from the available data.
 
-The next research experiment should compare **pooled, decision-focused inventory targets across sparse series** against this strong Quantile baseline. Any improvement must be measured across later time periods under the same cost/lead assumptions. Do not infer actual service performance without verified stock and primary demand.
+The current pooled trend/scale prototype is a first comparison, not evidence of superiority. Further research should investigate whether forecast bias, censored primary demand, or changes in the installed base explain the gap between out-of-sample policies and the test-informed fixed-stock benchmark. Any improvement must be measured across later time periods under the same cost/lead assumptions. Do not infer actual service performance without verified stock and primary demand.

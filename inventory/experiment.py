@@ -9,10 +9,10 @@ from .replay import Stock
 POLICIES = ('Quantile', 'Empirical', 'Robust')
 
 
-def evaluation(demand, lead=1, penalty=5., mode='none', refresh=13):
+def evaluation(demand, lead=1, penalty=5., mode='none', refresh=13, start_date='2025-01-06'):
     """Quarterly fitting on preceding 52 weeks, held-out replay from 2025 onward."""
     y = demand.to_numpy().astype(int)
-    start = int(np.searchsorted(demand.index, np.datetime64('2025-01-06')))
+    start = int(np.searchsorted(demand.index, np.datetime64(start_date)))
     states = None
     weekly = []
     for i in range(start, len(y)):
