@@ -7,7 +7,7 @@ A **small exploratory research model**, not an inventory-management system. Star
 ```bash
 pip install -r requirements.txt
 python -m inventory.experiment
-pytest -q
+python -m pytest -q
 ```
 
 The experiment compares three policies:
