@@ -1,49 +1,39 @@
-# Inventory decisions with uncertain substitution
+# Inventory decisions using real LSC records
 
-A **small exploratory research model**, not an inventory-management system. Starts at phase 3: stochastic demand, customer substitution at stockout, and uncertainty about substitution rates. No private LSC files or assumptions are required.
+Small exploratory model for **uncertain demand and possible T/U substitution**. No synthetic demand, fabricated sales observations, random substitution rates, or assumed financial costs. The optimization scenarios are **actual historical monthly purchases**, preserving T/U co-movement. The code reads the existing archives locally and does not publish confidential data.
 
 ## Run
 
 ```bash
 pip install -r requirements.txt
-python -m inventory.experiment
+python -m inventory.experiment --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip
 python -m pytest -q
 ```
 
-The experiment compares three policies:
+Defaults: physical base **BONPCP**, pump family **043-1200**. Change with `--base LYD --size 015-1400`. You must have both original archives. **Do not commit them to this public repository.**
 
-- **Ignore substitution:** choose inventory as if customers never switch products.
-- **Nominal:** choose inventory under moderate substitution.
-- **Minimax regret:** minimize worst *expected-cost regret* over several demand and substitution scenarios.
+## What the experiment actually measures
 
-All policies choose integer stock quantities `(T, U)` under a shared total capacity, with identical simulated demand paths for each decision within a scenario. Training and evaluation use different random seeds. The scenario-aware oracle is a benchmark, **not a feasible decision under uncertainty**.
+- Six nonoverlapping PCP sales extracts, including the main file through February 2026, avoid the documented February and March export overlap.
+- Select actual **T and U stator invoices**, not rotor lines, using physical `Location Code` and the exact nominal-capacity/lift family.
+- Use actual positive incoming transfers of matching T/U stators from the serial-level inventory ledger. A receipt is **not** evidence of beginning or ending inventory.
+- Compare **three study allocation budgets** drawn from the 25th, 50th, and 75th percentiles of 2024–25 monthly incoming transfers. This is *not a measured capacity limit*; it can be changed once LSC's inventory limits or service requirements are known.
+- Select inventory mixes on **January 2024–December 2025** observations, then evaluate on **January–August 2026**, with no future-period model selection.
+- Compare a stock mix based on actual historical transfer receipts, a no-switch stochastic allocation, and a **minimax-regret** allocation across possible substitution modes.
+- Report average *unserved recorded purchase units* and regret, **not** dollar savings, true lost demand, or realized counterfactual service rates.
 
-## Model
+No substitution rates are invented. Instead, we evaluate four **logical possibilities**: no switching, T→U only, U→T only, and either direction, all conditional on spare inventory. These are structural *bounds*, not estimates. We cannot identify customers' original first choices or acceptance rates from the sales data alone. This is **sensitivity analysis** using only real demand observations, not proof of causal substitution.
 
-One location and one potentially substitutable product pair. Primary requests are independent Poisson demands. Customers arrive in random order. If the requested product has sold out, a customer may accept the other available product with an assumed probability; otherwise the request goes unmet.
+The objective is coverage of historical billed units under a hypothetical monthly stock budget. Because orders can occur throughout a month and local stock carries over, this is **not** a reconstruction of LSC's actual stockout or customer experience. Historical purchased items are a biased proxy for unconstrained requests. It is deliberately a narrow research baseline, not a deployable policy.
 
-**Objective:** leftover stock cost + unfilled-request cost + accepted-substitution cost. These are reduced-form costs (e.g. lost margin can be included in the unmet penalty), not reported accounting profits. All default quantities and costs are **synthetic**.
+## Modules
 
-Change `CAPACITY`, `COSTS`, `DEMAND`, and scenarios in `inventory/experiment.py`. Enumeration is appropriate for small capacities; this is not a large-scale solver.
+- `inventory/data.py`: parse actual sales and incoming-transfer archives; build monthly T/U panel
+- `inventory/model.py`: count fulfillable units with optional directional substitution
+- `inventory/optimize.py`: enumerate inventory mixes and select policies
+- `inventory/experiment.py`: historical training and untouched later-period evaluation
+- `tests/test_model.py`: tiny arithmetic checks (not experiment inputs)
 
-We intentionally do **not** assume stockout substitution has been causally identified, or that a partial repair affects future reliability. No inter-base transfers, lead times, dynamic replenishment, or demand learning are modeled yet. The scenario set is a hypothesis, not a statistical confidence region. Minimax regret only protects against the specified scenarios.
+## Next research step
 
-## Optional cleaned sales input
-
-```bash
-python -m inventory.experiment --sales monthly.csv --base Bonnyville --size 30
-```
-
-Provide a CSV with columns `month,base,size,product,units` and products `T` and `U`. The panel must include the entire month calendar, including zero-sales months, and all original transaction exports must already be deduplicated. This simple adapter uses average **observed sales** as a proxy for primary request rates: this can be biased by stockouts and substitution. It is not a demand-identification method. Do not commit private data.
-
-## Layout
-
-- `inventory/model.py` — demand arrivals, substitutions, cost simulation
-- `inventory/optimize.py` — exhaustive choices and scenario regret
-- `inventory/experiment.py` — assumptions, policies, held-out comparisons
-- `inventory/data.py` — optional cleaned monthly CSV input
-- `tests/test_model.py` — mechanics checks
-
-## What to investigate
-
-Vary capacity, costs, demand mix, and substitution uncertainty. First ask when uncertainty actually changes the optimal inventory mix and whether robust planning improves held-out decisions. Add another location, lead times, or sequential learning **only after** a finding motivates it.
+Inspect sensitivity over **actual** base/size combinations and actual past receipt-volume quantiles. Then use the ledger to reconstruct credible local stock and improve the demand-observation model, explicitly accounting for unknown opening balances and order-driven transfers. Do not estimate substitution causally or claim inventory-policy savings without further evidence.
