@@ -55,3 +55,10 @@ def test_stock_and_hindsight():
     rows = evaluation(weekly, start_date='2026-01-05')
     assert rows and rows[0]['week'] >= '2026-01-05'
     assert len(hindsight(weekly, 5)) == 3
+
+
+def test_install_history_origin_not_leaking():
+    import pandas as pd
+    from inventory.installed_base import origin_fits_year
+    assert origin_fits_year(pd.Timestamp('2025-10-06'))
+    assert not origin_fits_year(pd.Timestamp('2024-12-30'))

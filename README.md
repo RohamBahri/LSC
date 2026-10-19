@@ -80,3 +80,39 @@ Initial 26-pair held-out result: at average ending stock of ~3 units, pooled rul
 In an exploratory run of 26 pairs (2024 T/U volumes at least five each), **Quantile covers more recorded purchases**, while Empirical and Robust show no clear advantage in modeled weekly costs at an assumed 5:1 shortage-to-holding ratio. Full interchangeability changes modeled coverage much more than policy choice, but it is **not identified** from the available data.
 
 The current pooled trend/scale prototype is a first comparison, not evidence of superiority. Further research should investigate whether forecast bias, censored primary demand, or changes in the installed base explain the gap between out-of-sample policies and the test-informed fixed-stock benchmark. Any improvement must be measured across later time periods under the same cost/lead assumptions. Do not infer actual service performance without verified stock and primary demand.
+
+## Cheap installed-base information test (2025 only)
+
+The existing 2026 frontiers are **exploratory**, since the same period has been
+examined repeatedly. Don't tune a new model to them. Instead run a small
+pre-2026 screening test for the *incremental predictive value* of well history:
+
+```bash
+python -m inventory.installed_base --sales data/datasets.zip --minimum 1 --output well_features_2025.csv
+python -m inventory.installed_base --sales data/datasets.zip --minimum 5 --output well_features_2025_regular.csv
+```
+
+- The cohort is selected from **2024 positive T/U sales** (1 or 5 units of each).
+- Each well's last observed *stator billing* is tracked as of each prediction
+  date. Features count recent and older last-billed wells at the item's **physical
+  billing location**, not verified active pumps or physical well locations.
+- Training origins and their 13-week future bills fall **entirely in 2024**;
+  evaluation origins and targets fall **entirely in 2025**. The script does not
+  use 2026 target data.
+- Compare trailing 52-week billed rates, a pooled sales-only Ridge regression,
+  and the same regression with well-history age bins. Models have identical
+  fixed regularization; no hyperparameter tuning on 2025.
+- These are **forecasting screens**, not decisions optimized over inventory costs
+  and not evidence that installation timing or failures have been observed.
+
+Initial result with the real archives (2025 evaluation, 13-week quantity WAPE):
+
+| 2024-selected cohort | Trailing 52-week rate | Pooled sales only | Pooled + well history |
+| --- | ---: | ---: | ---: |
+| 126 item pairs | 62.1% | 69.9% | 68.6% |
+| 26 item pairs | 49.2% | 58.5% | 59.0% |
+
+The initial information test **does not show an improvement over trailing
+sales**. Treat this as a negative pilot, not proof that better installed-base
+records could never help. Don't move on to larger decision-focused models on
+this evidence alone.
