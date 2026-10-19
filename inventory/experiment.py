@@ -1,55 +1,42 @@
-"""Run a small research experiment: simple vs nominal vs robust stock choices."""
+"""Real-data decision experiment: 2024-25 training, 2026 out-of-time evaluation."""
 import argparse
 import numpy as np
-from .model import Scenario, Costs
-from .optimize import allocations, best_regret, expected_costs
-from .data import observed_rates
+from .data import monthly_history
+from .model import MODES
+from .optimize import allocations, loss_matrix, policies
 
 
-CAPACITY = 12
-COSTS = Costs()                 # Illustrative; change to test economic assumptions.
-DEMAND = (6.0, 2.0)            # Mean primary requests; synthetic by default.
+def run(sales, inventory, base="BONPCP", size="043-1200"):
+    history = monthly_history(sales, inventory, base, size)
+    train, test = history.loc[:"2025-12"], history.loc["2026-01":]
 
-
-def run(demand=DEMAND, capacity=CAPACITY, train=3000, test=6000):
-    scenarios = [
-        Scenario("No substitution", demand, (0.0, 0.0)),
-        Scenario("Moderate", demand, (0.4, 0.1)),
-        Scenario("Strong", demand, (0.8, 0.3)),
-        Scenario("High T demand", (1.3 * demand[0], demand[1]), (0.6, 0.2)),
-        Scenario("High U demand", (demand[0], 1.5 * demand[1]), (0.6, 0.2)),
-    ]
-    choices = allocations(capacity)
-    fitted = expected_costs(choices, scenarios, COSTS, train, seed=10)
-    policies = {
-        "Ignore substitution": int(np.argmin(fitted[:, 0])),
-        "Nominal": int(np.argmin(fitted[:, 1])),
-        "Minimax regret": best_regret(fitted),
-    }
-    heldout = expected_costs(choices, scenarios, COSTS, test, seed=1000)
-    oracle = heldout.min(axis=0)  # Scenario-aware benchmark, not a feasible policy.
-
-    print("Decisions:", {name: choices[i] for name, i in policies.items()})
-    print("Costs: unmet T/U=12/8, leftover T/U=3/1, switching=2; units are illustrative")
-    print(f"{'Scenario':<19} {'Oracle':>9}" + "".join(f" {s:>20}" for s in policies))
-    for j, s in enumerate(scenarios):
-        print(f"{s.name:<19} {oracle[j]:9.2f}" +
-              "".join(f" {heldout[i, j]:20.2f}" for i in policies.values()))
-    print("Worst regret:" + "".join(
-        f" {max(heldout[i] - oracle):20.2f}" for i in policies.values()))
-    print("Mean regret: " + "".join(
-        f" {np.mean(heldout[i] - oracle):20.2f}" for i in policies.values()))
+    print(f"Physical location: {base} | pump family: {size}")
+    print(f"Observed billed units: train={int(train[['T','U']].sum().sum())}, "
+          f"test={int(test[['T','U']].sum().sum())}; months={len(train)}+{len(test)}")
+    print("Historical receipts are NOT stock on hand; billed units are NOT uncensored demand.")
+    print("Substitution modes are possibility bounds, NOT measured acceptance rates.")
+    results = {}
+    for quantile in (0.25, 0.50, 0.75):
+        # Study budget from actual training receipts, NOT physical storage capacity.
+        capacity = max(1, int(np.quantile(train[["T_received", "U_received"]].sum(axis=1), quantile)))
+        choices = allocations(capacity)
+        fitted = loss_matrix(choices, train[["T", "U"]].to_numpy())
+        selection = policies(choices, fitted, train[["T_received", "U_received"]].to_numpy())
+        holdout = loss_matrix(choices, test[["T", "U"]].to_numpy())
+        print(f"\nHistorical receipt-volume quantile {quantile:.0%}: budget={capacity} units")
+        print("Decisions:", {name: choices[i] for name, i in selection.items()})
+        print(f"{'Mode':<12}" + "".join(f"{name:>18}" for name in selection))
+        for j, mode in enumerate(MODES):
+            print(f"{mode:<12}" + "".join(f"{holdout[i, j]:18.2f}" for i in selection.values()))
+        results[quantile] = {name: (choices[i], holdout[i].copy()) for name, i in selection.items()}
+    return history, results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sales", help="Cleaned monthly sales CSV (optional)")
-    parser.add_argument("--base")
-    parser.add_argument("--size")
+    parser.add_argument("--sales", required=True, help="Local datasets.zip (never committed)")
+    parser.add_argument("--inventory", required=True, help="Local Inventory.zip (never committed)")
+    parser.add_argument("--base", default="BONPCP", help="Physical Location Code")
+    parser.add_argument("--size", default="043-1200", help="Nominal capacity-lift family")
     args = parser.parse_args()
-    if args.sales and not (args.base and args.size):
-        parser.error("--sales requires --base and --size")
-    means = observed_rates(args.sales, args.base, args.size) if args.sales else DEMAND
-    if args.sales:
-        print("WARNING: historical sales are a proxy for primary demand, not an estimate of lost requests.")
-    run(demand=means)
+    run(args.sales, args.inventory, args.base, args.size)

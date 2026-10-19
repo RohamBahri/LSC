@@ -1,32 +1,22 @@
-import numpy as np
-from inventory.model import Scenario, Costs, sample_requests, simulate
-from inventory.optimize import allocations, best_regret, expected_costs
+"""Tiny hand-checkable arithmetic tests; not research data or experiment inputs."""
+from inventory.model import fulfill
+from inventory.optimize import allocations, loss_matrix, policies
 
 
-def test_substitution_and_cost():
-    requests = (np.array([[0]]), np.array([[0.0]]))
-    yes = Scenario("yes", (1, 0), (1, 0))
-    no = Scenario("no", (1, 0), (0, 0))
-    assert simulate((0, 1), yes, requests)[0] == 2  # T request uses U
-    assert simulate((0, 1), no, requests)[0] == 13  # lost T + leftover U
+def test_no_switch():
+    assert fulfill((2, 0), (1, 3)) == (1, 0, 3)
 
 
-def test_arrival_order_and_conservation():
-    requests = (np.array([[0, 0, 1]]), np.zeros((1, 3)))
-    scenario = Scenario("x", (2, 1), (1, 0))
-    assert simulate((1, 1), scenario, requests)[0] == 10  # one unmet U, one switch
+def test_directions():
+    assert fulfill((0, 3), (2, 1), "T_to_U") == (3, 2, 0)
+    assert fulfill((3, 0), (1, 2), "U_to_T") == (3, 2, 0)
+    assert fulfill((0, 3), (2, 1), "none") == (1, 0, 2)
 
 
-def test_zero_demand_and_capacity():
-    choices = allocations(3)
-    assert len(choices) == 10 and all(sum(q) <= 3 for q in choices)
-    scenario = Scenario("empty", (0, 0), (0, 0))
-    requests = sample_requests(scenario, 5, 1)
-    assert np.all(simulate((2, 1), scenario, requests) == 7)
-
-
-def test_regret_selection():
-    matrix = np.array([[1, 9], [5, 5], [9, 1]])
-    assert best_regret(matrix) == 1
-    result = expected_costs([(0, 0), (1, 0)], [Scenario("x", (1, 1), (0, 0))], Costs(), 10, 1)
-    assert result.shape == (2, 1)
+def test_choices_and_regret():
+    choices = allocations(2)
+    assert choices == [(0, 2), (1, 1), (2, 0)]
+    losses = loss_matrix(choices, [(2, 0), (0, 2)])
+    assert losses.shape == (3, 4)
+    result = policies(choices, losses, [(1, 1), (1, 1)])
+    assert all(0 <= i < len(choices) for i in result.values())

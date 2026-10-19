@@ -1,24 +1,26 @@
-"""Enumerate feasible two-product inventory levels and compare decisions."""
+"""Small exhaustive inventory optimization over actual historical months."""
 import numpy as np
-from .model import sample_requests, simulate
+from .model import MODES, fulfill
 
 
 def allocations(capacity):
-    return [(t, u) for t in range(capacity + 1)
-            for u in range(capacity - t + 1)]
+    return [(t, capacity - t) for t in range(capacity + 1)]
 
 
-def expected_costs(choices, scenarios, costs, periods=3000, seed=1):
-    """Paired Monte Carlo: all decisions face identical demand in each scenario."""
-    result = np.empty((len(choices), len(scenarios)))
-    for j, scenario in enumerate(scenarios):
-        requests = sample_requests(scenario, periods, seed + j)
-        for i, stock in enumerate(choices):
-            result[i, j] = simulate(stock, scenario, requests, costs).mean()
-    return result
+def loss_matrix(choices, months):
+    """Average unserved *recorded* units for each choice and substitution possibility."""
+    return np.array([[np.mean([fulfill(stock, demand, mode)[2] for demand in months])
+                      for mode in MODES] for stock in choices])
 
 
-def best_regret(matrix):
-    """Minimize maximum expected regret across the specified scenarios."""
-    regret = matrix - matrix.min(axis=0)
-    return int(np.lexsort((matrix.mean(axis=1), regret.max(axis=1)))[0])
+def policies(choices, losses, receipts):
+    """Historical receipt mix, no-switch optimum, and min-max mode regret."""
+    mean_receipts = np.asarray(receipts, dtype=float).sum(axis=0)
+    if not mean_receipts.sum():
+        raise ValueError("No training-period receipts")
+    target_t = choices[0][1] * mean_receipts[0] / mean_receipts.sum()
+    historical = min(range(len(choices)), key=lambda i: abs(choices[i][0] - target_t))
+    direct = int(np.argmin(losses[:, 0]))
+    regret = losses - losses.min(axis=0)
+    robust = int(np.lexsort((losses.mean(axis=1), regret.max(axis=1)))[0])
+    return {"Receipt mix": historical, "No-switch": direct, "Minimax regret": robust}
