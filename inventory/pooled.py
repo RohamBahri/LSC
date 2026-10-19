@@ -91,8 +91,8 @@ def metrics(records):
     return round(float(cost), 3), round(float(stock), 3), round(float(1 - missed / sold), 4)
 
 
-def run(sales_zip, inventory_zip, top=0, lead=1, penalties=(2, 5, 10), output='pooled.csv'):
-    data = prepare(cohort(sales_zip, inventory_zip, top))
+def run(sales_zip, inventory_zip, top=0, lead=1, penalties=(2, 5, 10), output='pooled.csv', minimum=5):
+    data = prepare(cohort(sales_zip, inventory_zip, top, minimum))
     rows = []
     for penalty in penalties:
         models = fit(data, penalty, lead)
@@ -116,8 +116,9 @@ if __name__ == '__main__':
     p.add_argument('--sales', required=True)
     p.add_argument('--inventory', required=True)
     p.add_argument('--top', type=int, default=0)
+    p.add_argument('--minimum', type=int, default=5)
     p.add_argument('--lead', type=int, default=1)
     p.add_argument('--penalties', nargs='+', type=float, default=[2, 5, 10])
     p.add_argument('--output', default='pooled.csv')
     a = p.parse_args()
-    run(a.sales, a.inventory, a.top, a.lead, a.penalties, a.output)
+    run(a.sales, a.inventory, a.top, a.lead, a.penalties, a.output, a.minimum)

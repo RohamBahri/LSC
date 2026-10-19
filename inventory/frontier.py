@@ -10,9 +10,9 @@ from .replay import Stock
 PENALTIES = (1, 2, 3, 5, 7, 10, 14, 20)
 
 
-def cohort(sales_zip, inventory_zip, top=0):
+def cohort(sales_zip, inventory_zip, top=0, minimum=5):
     """2024-selected exact T/U pairs; every evaluation series shares the same calendar."""
-    pairs = candidates(sales_zip)[:top or None]
+    pairs = candidates(sales_zip, minimum)[:top or None]
     out = []
     for base, items, _ in pairs:
         try:
@@ -39,8 +39,8 @@ def hindsight(demand, penalty, lead=1):
     return best
 
 
-def run(sales_zip, inventory_zip, top=0, lead=1, penalties=PENALTIES, output=None):
-    pairs = cohort(sales_zip, inventory_zip, top)
+def run(sales_zip, inventory_zip, top=0, lead=1, penalties=PENALTIES, output=None, minimum=5):
+    pairs = cohort(sales_zip, inventory_zip, top, minimum)
     records = []
     for penalty in penalties:
         gathered = {p: [] for p in (*POLICIES, 'Hindsight fixed')}
@@ -75,8 +75,9 @@ if __name__ == '__main__':
     p.add_argument('--sales', required=True)
     p.add_argument('--inventory', required=True)
     p.add_argument('--top', type=int, default=0)
+    p.add_argument('--minimum', type=int, default=5)
     p.add_argument('--lead', type=int, default=1)
     p.add_argument('--penalties', nargs='+', type=float, default=PENALTIES)
     p.add_argument('--output', default='frontier.csv')
     a = p.parse_args()
-    run(a.sales, a.inventory, a.top, a.lead, a.penalties, a.output)
+    run(a.sales, a.inventory, a.top, a.lead, a.penalties, a.output, a.minimum)
