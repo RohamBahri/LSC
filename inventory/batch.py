@@ -58,6 +58,7 @@ def evaluate_all(sales_zip, inventory_zip, top=0, lead=1, penalty=5., mode='none
     print(result[['base', 'family', '2024_units', 'later_billed_units'] +
                  [p + '_cost' for p in POLICIES]].to_string(index=False))
     print('\nPer-pair median weekly loss:', {p: round(float(result[p + '_cost'].median()), 2) for p in POLICIES})
+    print('Median ending stock per pair:', {p: round(float(result[p + '_stock'].median()), 2) for p in POLICIES})
     print('Pooled recorded-purchase coverage:', {
         p: round(sum(r[p + '_coverage'] * r['later_billed_units'] for r in records) /
                  sum(r['later_billed_units'] for r in records), 3) for p in POLICIES})
@@ -102,6 +103,9 @@ if __name__ == '__main__':
     parser.add_argument('--penalty', type=float, default=5.)
     parser.add_argument('--mode', choices=('none', 'T_to_U', 'U_to_T', 'both'), default='none')
     parser.add_argument('--switch-map', action='store_true', help='Rank upper-bound substitution benefits')
+    parser.add_argument('--output', help='Optional CSV of aggregate pair results')
     a = parser.parse_args()
-    (switching_map(a.sales, a.inventory, a.top, a.lead, a.penalty, a.minimum)
-     if a.switch_map else evaluate_all(a.sales, a.inventory, a.top, a.lead, a.penalty, a.mode, a.minimum))
+    result = (switching_map(a.sales, a.inventory, a.top, a.lead, a.penalty, a.minimum)
+              if a.switch_map else evaluate_all(a.sales, a.inventory, a.top, a.lead, a.penalty, a.mode, a.minimum))
+    if a.output and not a.switch_map:
+        result.to_csv(a.output, index=False)
