@@ -58,7 +58,7 @@ Replay uses a lead time of 1 week by default (`--lead 2` for sensitivity). Each 
 
 ## Inventory–coverage frontiers and pooled learning
 
-Compare **2026 held-out stock–coverage curves**, not a single shortage penalty:
+Compare **exploratory 2026 stock–coverage curves**, not a single shortage penalty:
 
 ```bash
 python -m inventory.frontier --sales /path/to/datasets.zip --inventory /path/to/Inventory.zip --output frontier.csv
@@ -68,7 +68,7 @@ python -m inventory.compare --frontier frontier.csv --pooled pooled.csv
 
 - `frontier.py` sweeps shortage penalties for Quantile, Empirical, Robust, and a **fixed** hindsight benchmark chosen using all 2026 demand. The benchmark is unavailable to real decision makers and **not** an upper bound for all adaptive policies.
 - `pooled.py` fits **one shared low-dimensional trend/scale/stock-cushion rule** across the selected item pairs. Inputs are the exact item's trailing 4/13/52-week billed rates and its physical base's recent growth. Two variants choose shared parameters on **2025 only**: one minimizes next-horizon quantile (pinball) loss; the other minimizes the full inventory replay loss. The rule is deliberately much simpler than a general pooled ML model.
-- The default cohort requires >=5 billed units of each T/U product in 2024 (**26 pairs**). Use `--minimum 1` to include all **126** eligible, substantially sparser pairs, or `--top 50` for a smaller first run. The cohort is chosen from **2024**. Every method is evaluated on **January–August 2026**, with targets recomputed quarterly from prior observations. 2026 is **never used to fit pooled parameters**. Replays start from the first target and discard the same opening weeks.
+- The default cohort requires >=5 billed units of each T/U product in 2024 (**26 pairs**). Use `--minimum 1` to include all **126** eligible, substantially sparser pairs, or `--top 50` for a smaller first run. The cohort is chosen from **2024**. Every method is evaluated on **January–August 2026**, with targets recomputed quarterly from prior observations. 2026 is **not used to fit pooled parameters**, but has been inspected repeatedly and is not an untouched final test. Replays start from the first target and discard the same opening weeks.
 - `compare.py` interpolates observed curve points at common average ending-stock levels. **Interpolated values are descriptive and need not be achievable by a deterministic policy.** All policies use real billed volumes as a demand proxy; service coverage is not a verified customer fill rate.
 
 Initial 26-pair held-out result: at average ending stock of ~3 units, pooled rules cover ~86.6% of recorded purchases versus Quantile ~85.5%; at lower inventories the pooled rules do not outperform Quantile. No established pooled-learning advantage yet. The gap to the hindsight fixed-stock result cannot automatically be closed by a learnable policy.
@@ -99,8 +99,8 @@ python -m inventory.installed_base --sales data/datasets.zip --minimum 5 --outpu
 - Training origins and their 13-week future bills fall **entirely in 2024**;
   evaluation origins and targets fall **entirely in 2025**. The script does not
   use 2026 target data.
-- Compare trailing 52-week billed rates, a pooled sales-only Ridge regression,
-  and the same regression with well-history age bins. Models have identical
+- Compare trailing 52-week billed rates, a pooled sales-only Poisson regression,
+  and the same regression with well-history age bins. Poisson models use identical
   fixed regularization; no hyperparameter tuning on 2025.
 - These are **forecasting screens**, not decisions optimized over inventory costs
   and not evidence that installation timing or failures have been observed.
@@ -109,10 +109,39 @@ Initial result with the real archives (2025 evaluation, 13-week quantity WAPE):
 
 | 2024-selected cohort | Trailing 52-week rate | Pooled sales only | Pooled + well history |
 | --- | ---: | ---: | ---: |
-| 126 item pairs | 62.1% | 69.9% | 68.6% |
-| 26 item pairs | 49.2% | 58.5% | 59.0% |
+| 126 item pairs | 62.1% | 68.0% | 66.3% |
+| 26 item pairs | 49.2% | 52.2% | 52.6% |
 
 The initial information test **does not show an improvement over trailing
 sales**. Treat this as a negative pilot, not proof that better installed-base
 records could never help. Don't move on to larger decision-focused models on
 this evidence alone.
+
+## One-command frozen exploratory results package
+
+This **does not create a fresh holdout**. Existing 2025 and 2026 results have been repeatedly
+examined. Sales files end in August 2026, so the complete third quarter of 2026 cannot be tested.
+The package fixes the **existing** methods rather than adding unvalidated ones.
+
+```bash
+mkdir -p results/final
+python -m pytest -q | tee results/final/tests.txt
+python -m inventory.final_run --sales data/datasets.zip --inventory data/Inventory.zip --output results/final | tee results/final/run.log
+cd results && zip -r LSC_final_results.zip final && cd ..
+```
+
+**Pre-specified settings:** 2024 cohort screen (5/1 units per T and U),
+2025 Poisson forecast comparison and pooled-rule tuning,
+January–August 2026 stock-coverage evaluation, weekly order-up-to with carryover,
+lead times 1 and 2 weeks, normalized holding cost 1, shortage penalty grid
+1/2/3/5/7/10/14/20, no substitution in primary curves, and full T/U switching
+as a separate unverified optimistic scenario. A `protocol.json` captures data SHA256 hashes.
+
+**Implemented methods**: per-item Quantile, Empirical, Robust, shared pooled pinball/cost,
+Poisson forecast with and without billed-well history, trailing-sales baseline,
+and test-informed *fixed stock* hindsight. The earlier reviewer also described
+empirical-Bayes shrinkage and a future-rate oracle, but neither is implemented in this repo;
+this script does **not** claim to reproduce them.
+
+Send `results/LSC_final_results.zip` and, if anything fails, the Terminal error output.
+The archive contains item-level aggregates and should be shared privately, never committed.

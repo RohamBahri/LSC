@@ -106,7 +106,7 @@ def run(sales_zip, inventory_zip, top=0, lead=1, penalties=(2, 5, 10), output='p
     if output:
         result.to_csv(output, index=False)
     print(result.to_string(index=False))
-    print('2024: item screen, 2025: pooled tuning, 2026: untouched test.')
+    print('2024: item screen, 2025: pooled tuning, 2026: exploratory evaluation (reused in prior analyses).')
     print('Costs assumed; billed purchases treated as requested volumes only for counterfactual replay.')
     return result
 

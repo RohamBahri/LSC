@@ -6,7 +6,7 @@ No 2026 observations are used for training or evaluation.
 import argparse
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import PoissonRegressor
 from sklearn.preprocessing import StandardScaler
 from .data import SALES, read_zip
 
@@ -106,8 +106,8 @@ def compare(df):
         x = pd.concat([np.log1p(df[features].astype(float)), design], axis=1)
         xtrain, xvalid = x.loc[train.index], x.loc[valid.index]
         scale = StandardScaler().fit(xtrain)
-        learner = Ridge(alpha=30).fit(scale.transform(xtrain), np.log1p(train.next13))
-        prediction = np.maximum(0, np.expm1(learner.predict(scale.transform(xvalid))))
+        learner = PoissonRegressor(alpha=1.0, max_iter=300).fit(scale.transform(xtrain), train.next13)
+        prediction = learner.predict(scale.transform(xvalid))
         results.append((name, prediction))
     print(f'2024 training: {len(train)} item-origin rows; 2025 evaluation: {len(valid)}; '
           f'products: {df[["base","item"]].drop_duplicates().shape[0]}')
