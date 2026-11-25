@@ -1,0 +1,9 @@
+{
+  "base_configuration": "selected.json",
+  "overrides": {"guard": 2, "addprod": true},
+  "status": "exploratory shadow-pilot candidate selected after observing extended replay; not independently validated",
+  "planner_mode": "learned",
+  "signal": true,
+  "shipment_trim": -1,
+  "new_routes": false
+}

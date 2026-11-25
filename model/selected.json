@@ -1,0 +1,22 @@
+{
+  "name": "guard0",
+  "forecast": "ops",
+  "lead": 14,
+  "prep": 1,
+  "minimum": 2,
+  "cap": 45,
+  "cutcost": 1.4,
+  "prodcost": 2.0,
+  "movecost": 0.45,
+  "fixedcost": 2.0,
+  "fieldweight": 6.0,
+  "extweight": 3.0,
+  "protect": true,
+  "newroutes": false,
+  "lateral": true,
+  "addprod": false,
+  "limit": 3.0,
+  "planlower": true,
+  "guard": 0,
+  "holding": 0.15
+}

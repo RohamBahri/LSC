@@ -1,9 +1,11 @@
-.venv/
 __pycache__/
-.pytest_cache/
-*.pyc
+*.py[cod]
+.venv/
+*.npz
+*.joblib
 *.csv
-*.xlsx
 *.zip
+*.log
+refinement_results/
+work/
 data/
-results/
